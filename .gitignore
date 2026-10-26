@@ -1,0 +1,7 @@
+# 沙箱 ACL 修复脚本生成的临时目录（系统锁定，无法删除），不纳入版本管理
+acl-recovery-算法总结/
+
+# Windows / macOS 杂项
+Thumbs.db
+desktop.ini
+.DS_Store
