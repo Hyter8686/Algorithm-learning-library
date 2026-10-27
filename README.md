@@ -26,7 +26,13 @@ LeetCode 刷题笔记。目标只有一个：**刷过的题能再讲一遍，见
 
 - 远程仓库：`https://github.com/Hyter8686/Algorithm-learning-library.git`（分支 `master`）。
 - **每次总结完由 AI 执行 `git add -A && git commit`**，commit message 形如 `leetcode 1343/2090/2379 定长滑动窗口三题`。
-- **推送由仓库主自己在终端执行 `git push`**。AI 环境里 Git 的凭据助手（GCM）被沙箱挡住（`couldn't create signal pipe, Win32 error 5`），本地也没有 GitHub 凭据，故 AI 不执行 push。
+- **推送由仓库主自己在终端执行 `git push`**。AI 环境里 Git 的凭据助手（GCM）被沙箱挡住（`couldn't create signal pipe, Win32 error 5`），TLS 也拿不到凭据句柄（`schannel: SEC_E_NO_CREDENTIALS`），故 AI 不执行 push。
+- 凭据存在 **Windows 凭据管理器**（`git:https://github.com`，用户 `hyter7474-jpg`），不是 `~/.git-credentials`，GCM 会自动取用，正常推送时不必输密码。
+- **Git 不读 Windows 系统代理**（浏览器能开 GitHub ≠ git 能连），必须显式配置，否则 `github.com:443` 直连超时：
+  ```
+  git config --global http.https://github.com.proxy http://127.0.0.1:7897
+  ```
+  端口 `7897` 是 Clash Verge 的混合端口；代理软件换端口/关掉 TUN 模式后推送会再次失败，先查 `git config --global --get http.https://github.com.proxy` 与代理是否在跑。
 - `acl-recovery-算法总结/` 是沙箱 ACL 修复脚本生成的临时目录（系统锁定、删不掉），已在 `.gitignore` 里忽略，不进版本库。
 
 ## 状态标记
