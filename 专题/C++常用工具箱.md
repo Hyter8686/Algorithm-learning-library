@@ -152,6 +152,101 @@ ranges::max(v);                                   // 返回值，不是迭代器
 | 要求返回下标且容器是 `set` | 用成员函数 `s.lower_bound(x)` |
 | 排序比较器 | 必须严格弱序（`<`），写 `<=` 在 `std::sort` 里是 UB，可能 RE |
 
-## 六、我的理解演进
+## 六、语法后悔药：思路对了、代码编译不过的三个经典写法
+
+这三条都不是算法问题，但每个都足够让人卡半小时。**记形状，别记报错**（报错信息全是模板展开，看不懂是正常的）。
+
+### 1. 类内的成员不能用 `()` 初始化
+
+```cpp
+class Foo {
+    vector<vector<int>> pos(10001);   // ✗ error: expected ',' or '...' before numeric constant
+};
+```
+
+规则：**类内直接写成员初始化，只能用 `=` 或 `{}`**。`()` 只允许出现在函数体内的定义、或构造函数的初始化列表里。
+
+```cpp
+// ✅ 法一：类内用 =
+vector<vector<int>> pos = vector<vector<int>>(10001);
+
+// ✅ 法二：构造函数初始化列表（最推荐，没有临时对象）
+class Foo {
+    vector<vector<int>> pos;
+public:
+    Foo(int n) : pos(n) {}
+};
+
+// ✅ 法三：构造函数体内 resize
+Foo(int n) { pos.resize(n); }
+```
+
+**附带陷阱**：`vector<int> v{5}` 是「一个元素，值为 5」，`vector<int> v(5)` 才是「5 个 0」。花括号会优先匹配 `initializer_list`，所以 `/` 用 `{}` 表达「n 个元素」要看元素类型——**一律用 `=` 或初始化列表最安全**。
+
+### 2. `pair` 不能直接当 `unordered_map` / `unordered_set` 的键
+
+```cpp
+unordered_set<pair<int,int>> st;                    // ✗ 编译不过
+unordered_map<pair<int,int>, int> mp;               // ✗ 编译不过
+```
+
+原因：`unordered_*` 要求键同时支持 `hash` 和 `==`。`pair` 有 `operator==` 和 `operator<`，但标准库**没有**给它特化 `std::hash`（`std::hash` 只对基本类型、指针、`string` 等少数类型有特化）。
+
+四种正确写法，按推荐度排：
+
+```cpp
+// ① 编码成一个整数当键（最快，最常用）
+long long key = (long long)x * BASE + y;            // BASE 要大于 y 的取值范围
+unordered_set<long long> st;
+st.insert(key);
+
+// ② 自定义 hash（需要保留 pair 语义时）
+struct PairHash {
+    size_t operator()(const pair<int,int>& p) const {
+        return hash<long long>()(((long long)p.first << 32) ^ (unsigned)p.second);
+    }
+};
+unordered_set<pair<int,int>, PairHash> st2;
+
+// ③ 用 set / map（红黑树，O(log n)，只要求 operator<）
+set<pair<int,int>> st3;                             // 去重 / 判存在
+map<pair<int,int>, int> mp3;                        // 还要存值
+
+// ④ 二维压一维：如果两维都有界且非负，x * (maxY+1) + y
+```
+
+**`set` vs `unordered_set` 的区别**（用户这次正好卡在这）：
+
+| | `set` / `map` | `unordered_set` / `unordered_map` |
+| --- | --- | --- |
+| 底层 | 红黑树（平衡 BST） | 哈希表 |
+| 要求 | `operator<`（严格弱序） | `hash` + `operator==` |
+| 单次操作 | O(log n) | 均摊 O(1)，最坏 O(n) |
+| 有序性 | **有序**，可 `lower_bound` | 无序，不能按大小找 |
+| 迭代器稳定性 | 插入不失效 | rehash 后全部失效 |
+
+所以「用不了哈希，就退到 `set`」是**正确且常用**的兜底：n = 10^5 时 log n ≈ 17，多 17 倍常数通常照样过。真正的区别是 `set` 只能存键，要存「键 → 值」得用 `map`。
+
+### 3. `unordered_map` 的键要是「可哈希 + 可判等」的完整类型
+
+自定义结构体当键时，两样都得给：
+
+```cpp
+struct Point {
+    int x, y;
+    bool operator==(const Point& o) const { return x == o.x && y == o.y; }
+};
+struct PointHash {
+    size_t operator()(const Point& p) const {
+        return hash<long long>()(((long long)p.x << 32) ^ (unsigned)p.y);
+    }
+};
+unordered_map<Point, int, PointHash> mp;
+```
+
+只要 `==` 没给，报错是 `no match for 'operator=='`——出现在几百行模板展开的最后一行，很容易看漏。
+
+## 七、我的理解演进
 
 - 2026-10-30：建这份清单。起因是 2300 把 `lower_bound` 的返回值当成地址、还想 `/ sizeof(int)` 换下标——不是算法不懂，是**迭代器的模型没建对**。以后按清单逐条打勾，不通读教程。
+- 2026-11-11：3694 想用 `unordered_set<pair<int,int>>`、2080 在类里写 `vector<vector<int>> pos(10001);`，两次都是「思路顺、语法拦」。补了第六节，并把「用不了哈希就退 `set`」写成正式决策。
